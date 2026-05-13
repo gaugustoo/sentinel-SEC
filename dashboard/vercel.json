@@ -1,15 +1,22 @@
 {
   "version": 2,
-  "builds": [
+  "rewrites": [
     {
-      "src": "index.html",
-      "use": "@vercel/static"
+      "source": "/api/(.*)",
+      "destination": "/api/main.py"
+    
     }
-  ],
-  "routes": [
-    {
-      "src": "/(.*)",
-      "dest": "/index.html"
-    }
-  ]
+  {
+     "source":"/(.*)",
+  "destination":"/dashboard/index.html" 
+
+  }
+
+]
 }
+  
+  
+  
+
+  
+

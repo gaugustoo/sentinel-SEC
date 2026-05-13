@@ -1,13 +1,12 @@
 {
-  "version":2,
-  "rewrtes":[
+  "rewrites": [
     {
-      "source":"/api/(.*)",
-      "destination":"/api/main.py"  
+      "source": "/api/(.*)",
+      "destination": "/api/main.py"
     },
     {
-      "source":"/(.*)",
-      "destination":"/dashboard/index.html"
+      "source": "/(.*)",
+      "destination": "/dashboard/index.html "
     }
   ]
 }

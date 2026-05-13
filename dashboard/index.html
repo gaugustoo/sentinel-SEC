@@ -1,0 +1,800 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>SENTINEL — Security Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Share+Tech+Mono&family=Rajdhani:wght@400;500;600;700&family=Orbitron:wght@400;700;900&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.0/chart.umd.min.js"></script>
+<style>
+  /* ── Reset & Base ─────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #080b10;
+    --surface:   #0d1117;
+    --surface2:  #111820;
+    --border:    #1e2d3d;
+    --red:       #ff2d55;
+    --orange:    #ff7b00;
+    --yellow:    #ffd60a;
+    --green:     #00ff9d;
+    --cyan:      #00d4ff;
+    --blue:      #0080ff;
+    --text:      #c9d3dc;
+    --muted:     #4a5a6a;
+    --font-mono: 'Share Tech Mono', monospace;
+    --font-ui:   'Rajdhani', sans-serif;
+    --font-head: 'Orbitron', monospace;
+  }
+
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-ui);
+    font-size: 14px;
+    line-height: 1.5;
+    overflow-x: hidden;
+  }
+
+  /* ── Scanlines overlay ────────────────────────────────────── */
+  body::before {
+    content: '';
+    position: fixed; inset: 0; z-index: 1000; pointer-events: none;
+    background: repeating-linear-gradient(0deg, transparent, transparent 2px, rgba(0,212,255,.015) 2px, rgba(0,212,255,.015) 4px);
+    animation: scanlines 8s linear infinite;
+  }
+  @keyframes scanlines { from { background-position: 0 0; } to { background-position: 0 100px; } }
+
+  /* ── Layout ───────────────────────────────────────────────── */
+  .app { display: flex; flex-direction: column; height: 100vh; }
+
+  /* ── Header ───────────────────────────────────────────────── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 24px; height: 60px;
+    background: var(--surface);
+    border-bottom: 1px solid var(--border);
+    position: relative;
+  }
+  header::after {
+    content: '';
+    position: absolute; bottom: 0; left: 0; right: 0; height: 1px;
+    background: linear-gradient(90deg, transparent, var(--cyan), transparent);
+    animation: scan-h 3s ease-in-out infinite;
+  }
+  @keyframes scan-h { 0%,100% { opacity: .3; } 50% { opacity: 1; } }
+
+  .logo {
+    font-family: var(--font-head);
+    font-size: 18px; font-weight: 900;
+    color: var(--cyan);
+    letter-spacing: 4px;
+    text-shadow: 0 0 20px rgba(0,212,255,.5);
+    display: flex; align-items: center; gap: 10px;
+  }
+  .logo-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    background: var(--green);
+    box-shadow: 0 0 10px var(--green);
+    animation: pulse-dot 1.5s ease-in-out infinite;
+  }
+  @keyframes pulse-dot { 0%,100% { opacity: 1; transform: scale(1); } 50% { opacity: .4; transform: scale(.7); } }
+
+  .header-meta {
+    font-family: var(--font-mono); font-size: 11px; color: var(--muted);
+    display: flex; gap: 24px; align-items: center;
+  }
+  .status-pill {
+    display: flex; align-items: center; gap: 6px;
+    padding: 3px 10px; border-radius: 2px;
+    border: 1px solid var(--green);
+    color: var(--green); font-size: 11px;
+  }
+
+  /* ── Main grid ────────────────────────────────────────────── */
+  main {
+    flex: 1; overflow-y: auto;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    grid-template-rows: auto auto auto;
+    gap: 1px;
+    background: var(--border);
+    padding: 0;
+  }
+  main > * { background: var(--surface); }
+
+  /* ── KPI cards ────────────────────────────────────────────── */
+  .kpis {
+    grid-column: 1 / -1;
+    display: grid; grid-template-columns: repeat(5, 1fr);
+    gap: 1px; background: var(--border);
+  }
+
+  .kpi {
+    background: var(--surface);
+    padding: 20px 24px;
+    position: relative; overflow: hidden;
+    cursor: default;
+    transition: background .2s;
+  }
+  .kpi:hover { background: var(--surface2); }
+  .kpi::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0; height: 2px;
+  }
+  .kpi.red::before    { background: var(--red);    box-shadow: 0 0 12px var(--red); }
+  .kpi.orange::before { background: var(--orange); box-shadow: 0 0 12px var(--orange); }
+  .kpi.yellow::before { background: var(--yellow); box-shadow: 0 0 12px var(--yellow); }
+  .kpi.cyan::before   { background: var(--cyan);   box-shadow: 0 0 12px var(--cyan); }
+  .kpi.green::before  { background: var(--green);  box-shadow: 0 0 12px var(--green); }
+
+  .kpi-label {
+    font-size: 11px; letter-spacing: 2px; text-transform: uppercase;
+    color: var(--muted); margin-bottom: 8px;
+  }
+  .kpi-value {
+    font-family: var(--font-head); font-size: 32px; font-weight: 700;
+    line-height: 1;
+  }
+  .kpi.red .kpi-value    { color: var(--red);    text-shadow: 0 0 20px rgba(255,45,85,.4); }
+  .kpi.orange .kpi-value { color: var(--orange); text-shadow: 0 0 20px rgba(255,123,0,.4); }
+  .kpi.yellow .kpi-value { color: var(--yellow); text-shadow: 0 0 20px rgba(255,214,10,.4); }
+  .kpi.cyan .kpi-value   { color: var(--cyan);   text-shadow: 0 0 20px rgba(0,212,255,.4); }
+  .kpi.green .kpi-value  { color: var(--green);  text-shadow: 0 0 20px rgba(0,255,157,.4); }
+  .kpi-sub { font-size: 11px; color: var(--muted); margin-top: 6px; }
+
+  /* ── Panels ────────────────────────────────────────────────── */
+  .panel {
+    padding: 0;
+    display: flex; flex-direction: column;
+    position: relative;
+  }
+  .panel-header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px 20px;
+    border-bottom: 1px solid var(--border);
+  }
+  .panel-title {
+    font-family: var(--font-mono); font-size: 11px;
+    color: var(--cyan); letter-spacing: 2px; text-transform: uppercase;
+    display: flex; align-items: center; gap: 8px;
+  }
+  .panel-title::before {
+    content: '';
+    width: 6px; height: 6px;
+    background: var(--cyan);
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+    animation: diamond-pulse 2s ease-in-out infinite;
+  }
+  @keyframes diamond-pulse { 0%,100% { opacity: 1; } 50% { opacity: .3; } }
+
+  .panel-badge {
+    font-family: var(--font-mono); font-size: 10px;
+    color: var(--muted); background: var(--surface2);
+    padding: 2px 8px; border: 1px solid var(--border);
+  }
+  .panel-body { flex: 1; padding: 16px 20px; overflow: hidden; }
+
+  /* ── Threat feed ───────────────────────────────────────────── */
+  .feed { grid-column: span 2; }
+  .event-list { display: flex; flex-direction: column; gap: 2px; }
+
+  .event-item {
+    display: grid;
+    grid-template-columns: 4px 80px 1fr auto;
+    gap: 12px; align-items: start;
+    padding: 10px 12px;
+    background: var(--surface2);
+    border: 1px solid transparent;
+    transition: border-color .2s, background .2s;
+    position: relative; overflow: hidden;
+  }
+  .event-item:hover { border-color: var(--border); background: #161e28; }
+  .event-item::before {
+    content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
+  }
+  .event-item.critical::before { background: var(--red); }
+  .event-item.high::before     { background: var(--orange); }
+  .event-item.medium::before   { background: var(--yellow); }
+  .event-item.low::before      { background: var(--cyan); }
+
+  .event-bar { display: none; }
+  .event-time {
+    font-family: var(--font-mono); font-size: 10px; color: var(--muted);
+    padding-top: 1px;
+  }
+  .event-text { font-size: 13px; color: var(--text); line-height: 1.3; }
+  .event-type {
+    font-family: var(--font-mono); font-size: 9px;
+    letter-spacing: 1px; padding: 2px 6px;
+    white-space: nowrap;
+  }
+  .event-item.critical .event-type { color: var(--red); border: 1px solid rgba(255,45,85,.3); }
+  .event-item.high .event-type     { color: var(--orange); border: 1px solid rgba(255,123,0,.3); }
+  .event-item.medium .event-type   { color: var(--yellow); border: 1px solid rgba(255,214,10,.3); }
+
+  /* ── Chart panels ───────────────────────────────────────────── */
+  .chart-wrap { position: relative; height: 180px; }
+  .sev-grid { display: flex; flex-direction: column; gap: 10px; }
+  .sev-row { display: flex; align-items: center; gap: 10px; }
+  .sev-label { font-family: var(--font-mono); font-size: 10px; width: 60px; text-transform: uppercase; }
+  .sev-bar-bg { flex: 1; height: 6px; background: var(--surface2); border-radius: 1px; overflow: hidden; }
+  .sev-bar-fill { height: 100%; border-radius: 1px; transition: width 1.2s cubic-bezier(.16,1,.3,1); }
+  .sev-count { font-family: var(--font-mono); font-size: 11px; width: 28px; text-align: right; }
+  .sev-row.critical .sev-label { color: var(--red); }
+  .sev-row.high .sev-label     { color: var(--orange); }
+  .sev-row.medium .sev-label   { color: var(--yellow); }
+  .sev-row.low .sev-label      { color: var(--cyan); }
+  .sev-row.info .sev-label     { color: var(--muted); }
+  .sev-row.critical .sev-bar-fill { background: var(--red); box-shadow: 0 0 8px rgba(255,45,85,.5); }
+  .sev-row.high .sev-bar-fill     { background: var(--orange); box-shadow: 0 0 8px rgba(255,123,0,.5); }
+  .sev-row.medium .sev-bar-fill   { background: var(--yellow); box-shadow: 0 0 8px rgba(255,214,10,.5); }
+  .sev-row.low .sev-bar-fill      { background: var(--cyan); }
+  .sev-row.info .sev-bar-fill     { background: var(--muted); }
+
+  /* ── Scanner panel ───────────────────────────────────────────── */
+  .scanner-panel { grid-column: span 2; }
+
+  .scan-form {
+    display: grid; grid-template-columns: 1fr auto auto;
+    gap: 8px; margin-bottom: 16px;
+  }
+  .scan-form input {
+    background: var(--surface2); border: 1px solid var(--border);
+    color: var(--text); font-family: var(--font-mono); font-size: 13px;
+    padding: 8px 12px; outline: none;
+    transition: border-color .2s;
+  }
+  .scan-form input:focus { border-color: var(--cyan); }
+  .scan-form input::placeholder { color: var(--muted); }
+
+  .btn {
+    padding: 8px 16px;
+    font-family: var(--font-mono); font-size: 12px; letter-spacing: 1px;
+    border: 1px solid; cursor: pointer;
+    transition: all .2s; background: transparent; text-transform: uppercase;
+  }
+  .btn-scan {
+    color: var(--cyan); border-color: var(--cyan);
+  }
+  .btn-scan:hover { background: rgba(0,212,255,.1); box-shadow: 0 0 16px rgba(0,212,255,.2); }
+  .btn-scan:active { transform: scale(.97); }
+  .btn-red { color: var(--red); border-color: var(--red); }
+  .btn-red:hover { background: rgba(255,45,85,.1); }
+
+  .scan-output {
+    font-family: var(--font-mono); font-size: 12px;
+    background: var(--bg); border: 1px solid var(--border);
+    padding: 12px; height: 200px; overflow-y: auto; line-height: 1.8;
+    position: relative;
+  }
+  .scan-output::-webkit-scrollbar { width: 4px; }
+  .scan-output::-webkit-scrollbar-track { background: var(--surface); }
+  .scan-output::-webkit-scrollbar-thumb { background: var(--border); }
+
+  .log-critical { color: var(--red); }
+  .log-high     { color: var(--orange); }
+  .log-medium   { color: var(--yellow); }
+  .log-info     { color: var(--cyan); }
+  .log-ok       { color: var(--green); }
+  .log-muted    { color: var(--muted); }
+  .log-system   { color: var(--muted); }
+
+  .cursor-blink {
+    display: inline-block; width: 8px; height: 14px; background: var(--cyan);
+    animation: blink .8s step-end infinite; vertical-align: text-bottom;
+  }
+  @keyframes blink { 0%,100% { opacity: 1; } 50% { opacity: 0; } }
+
+  /* ── IOC lookup ───────────────────────────────────────────── */
+  .ioc-panel { grid-column: span 1; }
+  .ioc-result {
+    margin-top: 12px; padding: 14px;
+    background: var(--bg); border: 1px solid var(--border);
+    font-family: var(--font-mono); font-size: 11px; line-height: 2;
+    min-height: 120px;
+  }
+  .ioc-row { display: flex; justify-content: space-between; }
+  .ioc-key { color: var(--muted); }
+  .ioc-val-mal  { color: var(--red); font-weight: bold; }
+  .ioc-val-ok   { color: var(--green); }
+  .ioc-val-mon  { color: var(--yellow); }
+  .ioc-val-norm { color: var(--text); }
+
+  .score-bar-wrap { margin-top: 8px; }
+  .score-bar-bg { height: 4px; background: var(--surface2); margin-top: 4px; }
+  .score-bar { height: 100%; transition: width 1s ease; }
+
+  /* ── Map / Geo panel ─────────────────────────────────────── */
+  .geo-panel { grid-column: span 1; }
+  .geo-list { display: flex; flex-direction: column; gap: 6px; }
+  .geo-item {
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 8px 10px;
+    background: var(--surface2); font-size: 12px;
+    border-left: 2px solid var(--border);
+    transition: border-color .2s;
+  }
+  .geo-item:hover { border-color: var(--cyan); }
+  .geo-flag { font-size: 16px; margin-right: 8px; }
+  .geo-ip { font-family: var(--font-mono); font-size: 11px; color: var(--muted); }
+  .geo-score { font-family: var(--font-mono); font-size: 11px; }
+  .geo-score.high { color: var(--red); }
+  .geo-score.med  { color: var(--orange); }
+
+  /* ── Footer ───────────────────────────────────────────────── */
+  footer {
+    height: 28px; background: var(--surface);
+    border-top: 1px solid var(--border);
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 0 20px;
+    font-family: var(--font-mono); font-size: 10px; color: var(--muted);
+  }
+  .footer-ticker { display: flex; gap: 24px; }
+  .footer-dot { color: var(--green); }
+
+  /* ── Animations ────────────────────────────────────────────── */
+  @keyframes fade-in-up {
+    from { opacity: 0; transform: translateY(8px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .fade-in { animation: fade-in-up .4s ease forwards; }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <!-- ── Header ── -->
+  <header>
+    <div class="logo">
+      <div class="logo-dot"></div>
+      SENTINEL
+    </div>
+    <div class="header-meta">
+      <span id="clock">--:--:--</span>
+      <span>THREAT INTEL v1.0</span>
+      <div class="status-pill">● SISTEMA OPERACIONAL</div>
+    </div>
+  </header>
+
+  <main>
+
+    <!-- ── KPIs ── -->
+    <div class="kpis">
+      <div class="kpi red">
+        <div class="kpi-label">Ameaças Bloqueadas</div>
+        <div class="kpi-value" id="kpi-threats">—</div>
+        <div class="kpi-sub">Últimas 24h</div>
+      </div>
+      <div class="kpi orange">
+        <div class="kpi-label">Vulnerabilidades</div>
+        <div class="kpi-value" id="kpi-vulns">—</div>
+        <div class="kpi-sub">Detectadas hoje</div>
+      </div>
+      <div class="kpi yellow">
+        <div class="kpi-label">Scans Realizados</div>
+        <div class="kpi-value" id="kpi-scans">—</div>
+        <div class="kpi-sub">Hoje</div>
+      </div>
+      <div class="kpi cyan">
+        <div class="kpi-label">Problemas SSL</div>
+        <div class="kpi-value" id="kpi-ssl">—</div>
+        <div class="kpi-sub">Expiração / Config</div>
+      </div>
+      <div class="kpi green">
+        <div class="kpi-label">Uptime</div>
+        <div class="kpi-value" id="kpi-uptime">—</div>
+        <div class="kpi-sub">Disponibilidade</div>
+      </div>
+    </div>
+
+    <!-- ── Threat Feed ── -->
+    <div class="panel feed" style="grid-column: span 2;">
+      <div class="panel-header">
+        <span class="panel-title">Feed de Ameaças em Tempo Real</span>
+        <span class="panel-badge" id="event-count">0 eventos</span>
+      </div>
+      <div class="panel-body">
+        <div class="event-list" id="event-list"></div>
+      </div>
+    </div>
+
+    <!-- ── Threat Trend Chart ── -->
+    <div class="panel" style="grid-column: span 1;">
+      <div class="panel-header">
+        <span class="panel-title">Tendência — 12h</span>
+      </div>
+      <div class="panel-body">
+        <div class="chart-wrap">
+          <canvas id="trend-chart"></canvas>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Severity Distribution ── -->
+    <div class="panel" style="grid-column: span 1;">
+      <div class="panel-header">
+        <span class="panel-title">Distribuição por Severidade</span>
+      </div>
+      <div class="panel-body">
+        <div class="sev-grid" id="sev-grid"></div>
+      </div>
+    </div>
+
+    <!-- ── Live Scanner ── -->
+    <div class="panel scanner-panel">
+      <div class="panel-header">
+        <span class="panel-title">Scanner de Portas</span>
+        <span class="panel-badge">Simulado</span>
+      </div>
+      <div class="panel-body">
+        <div class="scan-form">
+          <input type="text" id="scan-target" placeholder="192.168.1.1 ou hostname..." />
+          <button class="btn btn-scan" onclick="runScan()">▶ SCAN</button>
+          <button class="btn btn-red" onclick="clearScan()">✕</button>
+        </div>
+        <div class="scan-output" id="scan-output">
+          <span class="log-muted"># SENTINEL Scanner v1.0 — aguardando alvo...</span><br>
+          <span class="log-muted"># Digite um IP ou hostname e clique em SCAN</span><br>
+          <span class="cursor-blink"></span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── IOC Lookup ── -->
+    <div class="panel ioc-panel">
+      <div class="panel-header">
+        <span class="panel-title">IoC Lookup</span>
+      </div>
+      <div class="panel-body">
+        <div class="scan-form" style="grid-template-columns: 1fr auto;">
+          <input type="text" id="ioc-input" placeholder="IP, domínio, hash..." />
+          <button class="btn btn-scan" onclick="lookupIOC()">CHECK</button>
+        </div>
+        <div class="ioc-result" id="ioc-result">
+          <span class="log-muted"># Aguardando consulta...</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ── Top Threats Geo ── -->
+    <div class="panel geo-panel">
+      <div class="panel-header">
+        <span class="panel-title">Top Threat IPs</span>
+      </div>
+      <div class="panel-body">
+        <div class="geo-list" id="geo-list"></div>
+      </div>
+    </div>
+
+  </main>
+
+  <!-- ── Footer ── -->
+  <footer>
+    <div class="footer-ticker">
+      <span><span class="footer-dot">●</span> SENTINEL SECURITY PLATFORM</span>
+      <span>Author: Guilherme Augusto</span>
+      <span>Python + FastAPI + JavaScript</span>
+    </div>
+    <span id="footer-time">—</span>
+  </footer>
+
+</div>
+
+<script>
+// ── Config ────────────────────────────────────────────────────────────────────
+// ── Configuração de ambiente ──────────────────────────────────────────────────
+// Render deploy: substitua pela URL real após o deploy no Render
+// Ex: 'https://sentinel-api.onrender.com'
+const API_BASE = 'https://sentinel-api-eki4.onrender.com';
+const USE_MOCK  = false; // true = dados simulados | false = usa API real no Render
+
+// ── Clock ─────────────────────────────────────────────────────────────────────
+function updateClock() {
+  const now = new Date();
+  const t = now.toLocaleTimeString('pt-BR', { hour12: false });
+  document.getElementById('clock').textContent = t;
+  document.getElementById('footer-time').textContent =
+    now.toLocaleDateString('pt-BR') + ' ' + t;
+}
+setInterval(updateClock, 1000);
+updateClock();
+
+// ── Mock data ─────────────────────────────────────────────────────────────────
+function mockStats() {
+  return {
+    summary: {
+      threats_blocked:     Math.floor(Math.random()*25)+5,
+      vulnerabilities_found: Math.floor(Math.random()*18)+8,
+      total_scans_today:   Math.floor(Math.random()*80)+40,
+      ssl_issues:          Math.floor(Math.random()*7)+1,
+      uptime_percent:      (99 + Math.random()*.9).toFixed(1),
+    },
+    recent_events: [
+      { time: relTime(3),  type: 'THREAT_BLOCKED', detail: 'IP 185.220.101.45 bloqueado — TOR exit node',             severity: 'critical' },
+      { time: relTime(12), type: 'PORT_SCAN',       detail: 'Scan detectado em 10.0.0.5 — 4 portas críticas abertas', severity: 'high'     },
+      { time: relTime(28), type: 'SSL_EXPIRY',      detail: 'Certificado api.exemplo.com expira em 12 dias',           severity: 'medium'   },
+      { time: relTime(45), type: 'BRUTE_FORCE',     detail: 'Força bruta SSH bloqueada em 172.16.0.4',                severity: 'high'     },
+      { time: relTime(60), type: 'VULN_DETECT',     detail: 'MySQL exposto detectado em 10.0.0.8:3306',               severity: 'critical' },
+    ],
+    threat_trend: Array.from({length:12}, (_, i) => ({
+      hour: `${String(new Date().getHours()-11+i).padStart(2,'0')}:00`,
+      count: Math.floor(Math.random()*14)
+    })),
+    severity_distribution: {
+      critical: Math.floor(Math.random()*7)+2,
+      high:     Math.floor(Math.random()*13)+5,
+      medium:   Math.floor(Math.random()*18)+8,
+      low:      Math.floor(Math.random()*25)+10,
+      info:     Math.floor(Math.random()*35)+15,
+    }
+  };
+}
+
+function relTime(minutes) {
+  const d = new Date(Date.now() - minutes*60000);
+  return d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+
+// ── Fetch wrapper ─────────────────────────────────────────────────────────────
+async function fetchStats() {
+  if (USE_MOCK) return mockStats();
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 5000);
+    const r = await fetch(`${API_BASE}/api/dashboard/stats`, { signal: controller.signal });
+    clearTimeout(timeout);
+    return r.json();
+  } catch(e) {
+    console.log('API offline, usando dados simulados');
+    return mockStats();
+  }
+}
+
+// ── KPIs ──────────────────────────────────────────────────────────────────────
+function updateKPIs(data) {
+  const s = data.summary;
+  animCount('kpi-threats', s.threats_blocked);
+  animCount('kpi-vulns',   s.vulnerabilities_found);
+  animCount('kpi-scans',   s.total_scans_today);
+  animCount('kpi-ssl',     s.ssl_issues);
+  document.getElementById('kpi-uptime').textContent = s.uptime_percent + '%';
+}
+
+function animCount(id, target) {
+  const el = document.getElementById(id);
+  const start = parseInt(el.textContent) || 0;
+  const step = (target - start) / 20;
+  let cur = start, i = 0;
+  const t = setInterval(() => {
+    cur += step; el.textContent = Math.round(cur);
+    if (++i >= 20) { el.textContent = target; clearInterval(t); }
+  }, 40);
+}
+
+// ── Threat Feed ───────────────────────────────────────────────────────────────
+function renderFeed(events) {
+  const list = document.getElementById('event-list');
+  document.getElementById('event-count').textContent = events.length + ' eventos';
+  list.innerHTML = events.map(e => `
+    <div class="event-item ${e.severity} fade-in">
+      <div class="event-bar"></div>
+      <div class="event-time">${e.time}</div>
+      <div class="event-text">${e.detail}</div>
+      <div class="event-type">${e.type}</div>
+    </div>
+  `).join('');
+}
+
+// ── Severity bars ─────────────────────────────────────────────────────────────
+function renderSeverity(dist) {
+  const grid = document.getElementById('sev-grid');
+  const max = Math.max(...Object.values(dist));
+  const rows = [
+    ['critical', 'CRITICAL', dist.critical],
+    ['high',     'HIGH',     dist.high],
+    ['medium',   'MEDIUM',   dist.medium],
+    ['low',      'LOW',      dist.low],
+    ['info',     'INFO',     dist.info],
+  ];
+  grid.innerHTML = rows.map(([cls, label, val]) => `
+    <div class="sev-row ${cls}">
+      <span class="sev-label">${label}</span>
+      <div class="sev-bar-bg">
+        <div class="sev-bar-fill" style="width:0%" data-target="${Math.round(val/max*100)}%"></div>
+      </div>
+      <span class="sev-count">${val}</span>
+    </div>
+  `).join('');
+  setTimeout(() => {
+    document.querySelectorAll('.sev-bar-fill').forEach(el => {
+      el.style.width = el.dataset.target;
+    });
+  }, 100);
+}
+
+// ── Trend Chart ───────────────────────────────────────────────────────────────
+let trendChart = null;
+function renderTrend(data) {
+  const ctx = document.getElementById('trend-chart').getContext('2d');
+  if (trendChart) trendChart.destroy();
+  trendChart = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels: data.map(d => d.hour),
+      datasets: [{
+        data: data.map(d => d.count),
+        borderColor: '#ff2d55',
+        backgroundColor: 'rgba(255,45,85,.08)',
+        borderWidth: 2,
+        tension: 0.4,
+        fill: true,
+        pointBackgroundColor: '#ff2d55',
+        pointRadius: 3,
+        pointHoverRadius: 5,
+      }]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { display: false } },
+      scales: {
+        x: { ticks: { color: '#4a5a6a', font: { family: "'Share Tech Mono'", size: 9 } },
+             grid: { color: '#1e2d3d' } },
+        y: { ticks: { color: '#4a5a6a', font: { family: "'Share Tech Mono'", size: 9 } },
+             grid: { color: '#1e2d3d' }, beginAtZero: true }
+      }
+    }
+  });
+}
+
+// ── Geo list ──────────────────────────────────────────────────────────────────
+const THREATS_GEO = [
+  { flag:'🇷🇺', country:'Rússia',  ip:'185.220.101.45', score:95 },
+  { flag:'🇨🇳', country:'China',   ip:'203.0.113.5',    score:91 },
+  { flag:'🇳🇱', country:'Holanda', ip:'192.42.116.16',  score:88 },
+  { flag:'🇺🇸', country:'EUA',     ip:'45.33.32.156',   score:72 },
+  { flag:'🇷🇴', country:'Romênia', ip:'198.51.100.1',   score:45 },
+];
+
+function renderGeo() {
+  document.getElementById('geo-list').innerHTML = THREATS_GEO.map(t => `
+    <div class="geo-item">
+      <span><span class="geo-flag">${t.flag}</span>${t.country}</span>
+      <span class="geo-ip">${t.ip}</span>
+      <span class="geo-score ${t.score>70?'high':'med'}">${t.score}/100</span>
+    </div>
+  `).join('');
+}
+
+// ── Port Scanner (simulado) ───────────────────────────────────────────────────
+const SCAN_DB = {
+  21:   { svc:'FTP',        sev:'CRITICAL', msg:'Credenciais expostas em texto plano' },
+  22:   { svc:'SSH',        sev:'INFO',     msg:'Verifique versão e acesso por chave' },
+  23:   { svc:'Telnet',     sev:'CRITICAL', msg:'Protocolo completamente inseguro'    },
+  80:   { svc:'HTTP',       sev:'LOW',      msg:'Tráfego sem criptografia'            },
+  443:  { svc:'HTTPS',      sev:'INFO',     msg:'Verifique versão TLS'                },
+  3306: { svc:'MySQL',      sev:'CRITICAL', msg:'Banco de dados exposto publicamente' },
+  5432: { svc:'PostgreSQL', sev:'CRITICAL', msg:'Banco de dados exposto'              },
+  6379: { svc:'Redis',      sev:'CRITICAL', msg:'Sem autenticação detectado'          },
+  8080: { svc:'HTTP-Alt',   sev:'MEDIUM',   msg:'Porta HTTP alternativa aberta'       },
+  27017:{ svc:'MongoDB',    sev:'CRITICAL', msg:'Sem autenticação detectado'          },
+};
+
+const LOG_CLS = { CRITICAL:'log-critical', HIGH:'log-high', MEDIUM:'log-medium',
+                  LOW:'log-info', INFO:'log-ok' };
+
+function log(el, html) { el.innerHTML += html + '<br>'; el.scrollTop = el.scrollHeight; }
+
+async function runScan() {
+  const target = document.getElementById('scan-target').value.trim();
+  if (!target) return;
+  const out = document.getElementById('scan-output');
+  out.innerHTML = '';
+  log(out, `<span class="log-muted">┌─ SENTINEL SCANNER ──────────────────────┐</span>`);
+  log(out, `<span class="log-muted">│ Alvo:    <span class="log-info">${target}</span></span>`);
+  log(out, `<span class="log-muted">│ Início:  ${new Date().toLocaleTimeString('pt-BR')}</span>`);
+  log(out, `<span class="log-muted">└─────────────────────────────────────────┘</span>`);
+  await sleep(300);
+  log(out, `<span class="log-muted">[*] Iniciando varredura de portas...</span>`);
+
+  const ports = [21,22,23,80,443,3306,5432,6379,8080,27017];
+  const open = [];
+
+  for (const port of ports) {
+    await sleep(120 + Math.random()*80);
+    const isOpen = Math.random() < 0.35;
+    if (isOpen) {
+      const v = SCAN_DB[port];
+      log(out, `<span class="${LOG_CLS[v.sev]}">[${v.sev.padEnd(8)}] ${port}/${v.svc} — ${v.msg}</span>`);
+      open.push({ port, ...v });
+    }
+  }
+
+  await sleep(200);
+  log(out, `<span class="log-muted">─────────────────────────────────────────</span>`);
+
+  const hasCritical = open.some(p => p.sev === 'CRITICAL');
+  const riskCls = hasCritical ? 'log-critical' : open.length ? 'log-high' : 'log-ok';
+  const riskLvl = hasCritical ? 'CRITICAL' : open.length ? 'HIGH' : 'SAFE';
+
+  log(out, `<span class="${riskCls}">[✓] Scan completo — ${open.length} porta(s) abertas</span>`);
+  log(out, `<span class="${riskCls}">[!] Nível de risco: ${riskLvl}</span>`);
+  log(out, `<span class="log-muted">[*] Relatório salvo em sentinel_report.json</span>`);
+}
+
+function clearScan() {
+  document.getElementById('scan-output').innerHTML =
+    '<span class="log-muted"># Output limpo — aguardando novo alvo...</span><br><span class="cursor-blink"></span>';
+}
+
+// ── IoC Lookup ────────────────────────────────────────────────────────────────
+const THREAT_IPS = {
+  '185.220.101.45': { mal:true, score:95, tags:['tor-exit','malware-c2'],    action:'BLOCK'   },
+  '192.42.116.16':  { mal:true, score:88, tags:['tor-exit','scanning'],       action:'BLOCK'   },
+  '45.33.32.156':   { mal:true, score:72, tags:['scanning','brute-force'],    action:'MONITOR' },
+  '203.0.113.5':    { mal:true, score:91, tags:['botnet','ddos'],             action:'BLOCK'   },
+};
+
+function lookupIOC() {
+  const val = document.getElementById('ioc-input').value.trim();
+  const out = document.getElementById('ioc-result');
+  if (!val) return;
+  const t = THREAT_IPS[val];
+  const now = new Date().toLocaleTimeString('pt-BR');
+
+  if (t) {
+    const scoreW = t.score;
+    const scoreColor = t.score > 80 ? 'var(--red)' : t.score > 50 ? 'var(--orange)' : 'var(--yellow)';
+    out.innerHTML = `
+      <div class="ioc-row"><span class="ioc-key">IoC:</span>      <span class="ioc-val-norm">${val}</span></div>
+      <div class="ioc-row"><span class="ioc-key">Status:</span>   <span class="ioc-val-mal">⚠ MALICIOSO</span></div>
+      <div class="ioc-row"><span class="ioc-key">Score:</span>    <span class="ioc-val-mal">${t.score}/100</span></div>
+      <div class="ioc-row"><span class="ioc-key">Tags:</span>     <span class="ioc-val-norm">${t.tags.join(', ')}</span></div>
+      <div class="ioc-row"><span class="ioc-key">Ação:</span>     <span class="ioc-val-mal">${t.action}</span></div>
+      <div class="ioc-row"><span class="ioc-key">Checked:</span>  <span class="ioc-val-norm">${now}</span></div>
+      <div class="score-bar-wrap">
+        <div class="ioc-row"><span class="ioc-key">Risco</span></div>
+        <div class="score-bar-bg">
+          <div class="score-bar" style="width:0%;background:${scoreColor}" data-w="${scoreW}%"></div>
+        </div>
+      </div>`;
+    setTimeout(() => {
+      const bar = out.querySelector('.score-bar');
+      if (bar) bar.style.width = bar.dataset.w;
+    }, 50);
+  } else {
+    const score = Math.floor(Math.random()*30)+5;
+    out.innerHTML = `
+      <div class="ioc-row"><span class="ioc-key">IoC:</span>      <span class="ioc-val-norm">${val}</span></div>
+      <div class="ioc-row"><span class="ioc-key">Status:</span>   <span class="ioc-val-ok">✓ NÃO LISTADO</span></div>
+      <div class="ioc-row"><span class="ioc-key">Score:</span>    <span class="ioc-val-ok">${score}/100</span></div>
+      <div class="ioc-row"><span class="ioc-key">Ação:</span>     <span class="ioc-val-mon">MONITOR</span></div>
+      <div class="ioc-row"><span class="ioc-key">Checked:</span>  <span class="ioc-val-norm">${now}</span></div>`;
+  }
+}
+
+// ── Bootstrap ─────────────────────────────────────────────────────────────────
+function sleep(ms) { return new Promise(r => setTimeout(r, ms)); }
+
+async function loadDashboard() {
+  const data = await fetchStats();
+  updateKPIs(data);
+  renderFeed(data.recent_events);
+  renderTrend(data.threat_trend);
+  renderSeverity(data.severity_distribution);
+  renderGeo();
+}
+
+loadDashboard();
+// Auto-refresh a cada 30s
+setInterval(loadDashboard, 30000);
+
+// Scan via Enter
+document.getElementById('scan-target').addEventListener('keydown', e => { if(e.key==='Enter') runScan(); });
+document.getElementById('ioc-input').addEventListener('keydown', e => { if(e.key==='Enter') lookupIOC(); });
+</script>
+</body>
+</html>

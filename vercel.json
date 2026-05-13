@@ -5,8 +5,12 @@
       "destination": "/api/main.py"
     },
     {
-      "source": "/(.*)",
+      "source": "/",
       "destination": "/dashboard/index.html "
+    },
+    {
+      "source": "/",
+      "destination": "/dashboard/$1"
     }
   ]
 }

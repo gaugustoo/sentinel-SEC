@@ -15,10 +15,7 @@
     {
       "src": "/",
       "dest": "/dashboard/index.html"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/$1"
     }
+
   ]
 }

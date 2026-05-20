@@ -16,6 +16,9 @@ import hashlib
 import ipaddress
 from typing import Optional
 from enum import Enum
+from fastapi.staticfiles import StaticFiles
+from fastapi.responses import FileResponse
+import os
 
 app = FastAPI(
     title="SENTINEL API",
@@ -27,6 +30,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
+    app.mount("/dashboard", StaticFiles(directory="dashboard"), name="dashboard"),
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
@@ -125,12 +129,10 @@ THREAT_FEED = [
 
 @app.get("/", tags=["Status"])
 async def root():
-    return {
-        "service": "SENTINEL Security Platform",
-        "version": "1.0.0",
-        "status": "operational",
-        "endpoints": ["/api/scan/ports", "/api/scan/ssl", "/api/threats/ioc", "/api/vulnerabilities", "/api/dashboard/stats"]
-    }
+    # Caminho correto para o Vercel/Render acharem o index.html
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    html_path = os.path.join(base_dir, "dashboard", "index.html")
+    return FileResponse(html_path)
 
 @app.post("/api/scan/ports", response_model=PortScanResult, tags=["Scanner"])
 async def scan_ports(scan: ScanTarget):

@@ -1,12 +1,4 @@
 {
-<<<<<<< HEAD
-  "version": 2,
-  "builds": [
-    {
-      "src": "dashboard/index.html",
-=======
-
-  "version": 2,
   "builds": [
     {
       "src": "api/*.py",
@@ -14,23 +6,13 @@
     },
     {
       "src": "dashboard/**",
->>>>>>> ce8a79bc7ffa354b7108ff64296cc3cc76a6452c
       "use": "@vercel/static"
     }
   ],
-  "routes": [
+  "routes":[
     {
-<<<<<<< HEAD
       "src": "/(.*)",
-      "dest": "/dashboard/index.html"
+      "dest": "api/main.py"
     }
   ]
 }
-=======
-      "src": "/",
-      "dest": "/dashboard/index.html"
-    }
-
-  ]
-}
->>>>>>> ce8a79bc7ffa354b7108ff64296cc3cc76a6452c

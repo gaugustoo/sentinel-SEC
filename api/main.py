@@ -30,7 +30,7 @@ app = FastAPI(
 
 app.add_middleware(
     CORSMiddleware,
-    app.mount("/dashboard", StaticFiles(directory="dashboard"), name="dashboard"),
+   # app.mount("/dashboard", StaticFiles(directory="dashboard"), name="dashboard"),
     allow_origins=["*"],
     allow_methods=["*"],
     allow_headers=["*"],
@@ -129,10 +129,11 @@ THREAT_FEED = [
 
 @app.get("/", tags=["Status"])
 async def root():
-    # Caminho correto para o Vercel/Render acharem o index.html
-    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    html_path = os.path.join(base_dir, "dashboard", "index.html")
-    return FileResponse(html_path)
+    return {
+        "service": "SENTINEL Security Platform",
+        "version": "1.0.0",
+        "status": "operational",
+        }
 
 @app.post("/api/scan/ports", response_model=PortScanResult, tags=["Scanner"])
 async def scan_ports(scan: ScanTarget):

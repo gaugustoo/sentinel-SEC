@@ -1,26 +1,12 @@
 {
-  "builds": [
+  "rewrtites": [
     {
-      "src": "api/main.py",
-      "use": "@vercel/python"
+      "source": "/api(.*)",
+      "destination": "api/main.py"
     },
     {
-      "src": "dashboard/**",
-      "use": "@vercel/static"
-    }
-  ],
-  "routes":[
-    {
-      "src": "/api/(.*)",
-      "dest": "/api/main.py"
-    },
-    {
-      "src": "/dashboard/(.*)",
-      "dest": "/dashboard/$1"
-    },
-    {
-      "src": "/$",
-      "dest": "/dashboard/index.html"
+      "source": "/(.*)",
+      "destination": "/dashboard/$1"
     }
   ]
 }

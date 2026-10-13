@@ -4,7 +4,7 @@ API REST completa com FastAPI
 Author: Guilherme Augusto
 """
 
-from fastapi import FastAPI, HTTPException, BackgroundTasks, Query
+from fastapi import FastAPI, HTTPException, BackgroundTasks, Query, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel, Field
 import asyncio
@@ -20,6 +20,8 @@ from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
 import os
 
+from api.security import install_cors, rate_limit, verify_api_key, rate_limit_status
+
 app = FastAPI(
     title="SENTINEL API",
     description="Security Monitoring & Threat Intelligence Platform",
@@ -28,13 +30,10 @@ app = FastAPI(
     redoc_url="/api/redoc",
 )
 
-app.add_middleware(
-    CORSMiddleware,
-   # app.mount("/dashboard", StaticFiles(directory="dashboard"), name="dashboard"),
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# CORS restrito por SENTINEL_ALLOWED_ORIGINS (ver api/security.py).
+# Substitui o allow_origins=["*"] anterior, que permitia a qualquer origem
+# disparar varreduras a partir desta infraestrutura.
+install_cors(app)
 
 # ─── Modelos ─────────────────────────────────────────────────────────────────
 
@@ -133,9 +132,15 @@ async def root():
         "service": "SENTINEL Security Platform",
         "version": "1.0.0",
         "status": "operational",
-        }
+        "security": rate_limit_status(),
+    }
 
-@app.post("/api/scan/ports", response_model=PortScanResult, tags=["Scanner"])
+@app.post(
+    "/api/scan/ports",
+    response_model=PortScanResult,
+    tags=["Scanner"],
+    dependencies=[Depends(rate_limit), Depends(verify_api_key)],
+)
 async def scan_ports(scan: ScanTarget):
     """Realiza varredura de portas no alvo especificado."""
     open_ports = []
@@ -195,7 +200,12 @@ async def scan_ports(scan: ScanTarget):
         timestamp=datetime.datetime.now()
     )
 
-@app.get("/api/scan/ssl", response_model=SSLReport, tags=["Scanner"])
+@app.get(
+    "/api/scan/ssl",
+    response_model=SSLReport,
+    tags=["Scanner"],
+    dependencies=[Depends(rate_limit), Depends(verify_api_key)],
+)
 async def check_ssl(hostname: str = Query(..., example="google.com")):
     """Verifica certificado SSL/TLS de um hostname."""
     issues = []
@@ -208,7 +218,7 @@ async def check_ssl(hostname: str = Query(..., example="google.com")):
         conn.settimeout(5)
         conn.connect((hostname, 443))
         cert = conn.getpeercert()
-        conn.close()
+        protocol = conn.version()
 
         expiry_str = cert.get("notAfter", "")
         expiry_date = datetime.datetime.strptime(expiry_str, "%b %d %H:%M:%S %Y %Z") if expiry_str else None
@@ -220,7 +230,6 @@ async def check_ssl(hostname: str = Query(..., example="google.com")):
             issues.append("CRÍTICO: Certificado expira em menos de 7 dias")
 
         issuer = dict(x[0] for x in cert.get("issuer", []))
-        protocol = conn.version() if hasattr(conn, "version") else "TLS"
 
         risk = "HIGH" if issues else "LOW"
 
@@ -353,3 +362,4 @@ async def generate_report(target: str = Query(..., example="192.168.1.0/24")):
             "Implementar sistema de detecção de intrusão (IDS/IPS)",
         ]
     }
+    

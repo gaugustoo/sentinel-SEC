@@ -100,11 +100,15 @@ O passo 7 merece nota: o `risk_level` da resposta é uma redução — o pior ac
 | Motor de varredura | Funcional | Conexões TCP e TLS reais |
 | Base de serviços | Funcional | Classificação, severidade e remediação corretas; **CVE ilustrativos** |
 | Relatório e score (CLI) | Funcional | Derivado dos achados |
-| Dashboard — painéis | Demonstração | Valores estáticos |
+| `/api/vulnerabilities` | Funcional | Lê a base interna de portas do próprio código |
+| Dashboard — painéis | Demonstração | Consome `/api/dashboard/stats`, cujos agregados são gerados por `random` |
 | Dashboard — Top Threat IPs | Demonstração | Endereços são exemplos e blocos reservados |
-| `/api/threat/*` | Demonstração | Sem base externa de threat intelligence |
+| `/api/threats/ioc` | Demonstração | Consulta uma lista fixa de cinco IPs em memória |
+| `/api/dashboard/stats` | Misto | A rota responde de verdade, mas os números saem de `random` a cada chamada |
 
-A regra que separa as duas: **tudo que faz I/O de rede é funcional; tudo que agrega em tela é demonstração.** Serve como critério para avaliar qualquer adição futura.
+A regra que separa as duas: **tudo que faz I/O de rede contra o alvo é funcional; tudo que agrega em tela é demonstração.** Serve como critério para avaliar qualquer adição futura.
+
+Duas rotas pedem nuance. `/api/dashboard/stats` é funcional enquanto rota — responde, valida parâmetros e devolve JSON —, mas o conteúdo é aleatório a cada chamada, o que explica por que os números do dashboard mudam a cada atualização. `/api/threats/ioc` é honesta em relação ao seu propósito: compara o valor recebido com cinco IPs em memória e, para qualquer outro, calcula um score a partir do hash do texto, o que produz um resultado determinístico mas arbitrário. Nenhuma das duas deve ser lida como fonte de inteligência.
 
 ---
 
@@ -118,13 +122,29 @@ A regra que separa as duas: **tudo que faz I/O de rede é funcional; tudo que ag
 | --- | --- | --- |
 | 21 (FTP) | `high` | `critical` |
 | 23 (Telnet) | `critical` | `critical` |
+| 445 (SMB) | ausente | `critical` |
+| 3389 (RDP) | ausente | `high` |
+| 6379 (Redis) | ausente | `critical` |
 | Cobertura total | 9 portas | 20 portas |
+
+O CLI cobre portas que a API simplesmente não conhece — 445, 3389 e 6379 entre elas, justamente as de maior impacto. Uma varredura feita pelo dashboard nunca reporta EternalBlue ou BlueKeep; a mesma faixa, pelo CLI, reporta.
 
 O mesmo alvo recebe classificações diferentes conforme o ponto de entrada. A extração de `sentinel_core/` resolve e é o item de maior impacto no roadmap.
 
-### 2. Ausência de autenticação e limite (resolvido em `security.py`)
+### 2. Ausência de autenticação e limite — resolvido
 
-A configuração original tinha CORS aberto, nenhuma autenticação e nenhum rate limit. Um terceiro podia disparar varreduras a partir da infraestrutura do projeto, sem deixar rastro e sem custo — deslocando a responsabilidade legal para o operador. `security.py` fecha os três pontos; a correção depende de o módulo estar registrado no `main.py`.
+A configuração original tinha CORS aberto, nenhuma autenticação e nenhum rate limit. Um terceiro podia disparar varreduras a partir da infraestrutura do projeto, sem deixar rastro e sem custo — deslocando a responsabilidade legal para o operador.
+
+Fechado em duas partes. `api/security.py` implementa as três camadas; `api/main.py` as registra: `install_cors(app)` substitui o middleware anterior, e as rotas `POST /api/scan/ports` e `GET /api/scan/ssl` encadeiam `Depends(rate_limit)` e `Depends(verify_api_key)`.
+
+A proteção só passa a valer com as variáveis definidas no Render:
+
+| Variável | Sem ela |
+| --- | --- |
+| `SENTINEL_ALLOWED_ORIGINS` | CORS cai no padrão de desenvolvimento e o dashboard deixa de conseguir chamar a API |
+| `SENTINEL_API_KEY` | A autenticação é ignorada e a API permanece aberta |
+
+O segundo caso é deliberado — sem a variável definida, `verify_api_key` retorna sem bloquear, para não travar desenvolvimento local. Em produção, defini-la é o que fecha o buraco.
 
 ### 3. Estado do rate limit em memória
 
@@ -157,6 +177,8 @@ O CI garante que a aplicação importa, sobe e documenta rotas — o piso, não 
 | `SENTINEL_RATE_DISABLED` | ausente | `1` desliga o rate limit (uso local e CI) |
 
 Se `SENTINEL_API_KEY` não estiver definida, a autenticação é ignorada e a API fica aberta — deliberado, para não travar o desenvolvimento local. Em produção, a chave é obrigatória.
+
+A segunda variável não tem esse mecanismo de escape: se `SENTINEL_ALLOWED_ORIGINS` não for definida, o CORS usa o padrão de desenvolvimento e **o dashboard para de conseguir chamar a API**. Definir as duas no Render é o que completa o hardening.
 
 ### Comportamento esperado do tier gratuito
 

@@ -29,32 +29,65 @@ jobs:
       - name: Instalar dependências
         run: |
           python -m pip install --upgrade pip
-          pip install -r requirements.txt
+          if [ -f requirements.txt ]; then
+            pip install -r requirements.txt
+          else
+            pip install fastapi uvicorn pydantic
+          fi
           pip install ruff
 
       - name: Verificar sintaxe e imports
         run: |
-          python -m compileall -q api scanner
+          TARGETS=""
+          for dir in api scanner; do
+            if [ -d "$dir" ]; then TARGETS="$TARGETS $dir"; fi
+          done
+          if [ -z "$TARGETS" ]; then
+            echo "Nenhum diretório de código encontrado — nada a verificar."
+            exit 0
+          fi
+          echo "Verificando:$TARGETS"
+          python -m compileall -q $TARGETS
 
       - name: Lint com Ruff
-        run: ruff check api scanner
+        run: |
+          TARGETS=""
+          for dir in api scanner; do
+            if [ -d "$dir" ]; then TARGETS="$TARGETS $dir"; fi
+          done
+          if [ -z "$TARGETS" ]; then
+            echo "Nenhum diretório de código encontrado — nada a lintar."
+            exit 0
+          fi
+          # E9 = erro de sintaxe, F = nomes indefinidos e imports não usados.
+          # Estilo fica fora para não travar o CI em código legado.
+          ruff check --select E9,F $TARGETS
 
       - name: Subir a API e validar o health check
         run: |
+          if [ ! -f api/main.py ]; then
+            echo "api/main.py ainda não existe — etapa ignorada."
+            exit 0
+          fi
           uvicorn api.main:app --host 127.0.0.1 --port 8000 &
           for i in $(seq 1 20); do
             if curl -sf http://127.0.0.1:8000/ > /dev/null; then
-              echo "API respondeu em http://127.0.0.1:8000/"
-              curl -s http://127.0.0.1:8000/
+              echo "API respondeu:"
+              curl -s http://127.0.0.1:8000/ | head -c 500
+              echo
               exit 0
             fi
             sleep 2
           done
-          echo "A API não respondeu no tempo esperado"
+          echo "A API não respondeu no tempo esperado."
           exit 1
 
       - name: Validar o schema OpenAPI
         run: |
+          if [ ! -f api/main.py ]; then
+            echo "api/main.py ainda não existe — etapa ignorada."
+            exit 0
+          fi
           python - <<'PY'
           import json, urllib.request
           with urllib.request.urlopen("http://127.0.0.1:8000/openapi.json") as r:

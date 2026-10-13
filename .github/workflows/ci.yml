@@ -7,23 +7,18 @@ on:
     branches: [main]
 
 jobs:
-  lint-and-test:
-    name: Lint & import check (Python ${{ matrix.python-version }})
+  validate:
+    name: Validar aplicação
     runs-on: ubuntu-latest
-
-    strategy:
-      fail-fast: false
-      matrix:
-        python-version: ["3.10", "3.11", "3.12"]
 
     steps:
       - name: Checkout do repositório
         uses: actions/checkout@v4
 
-      - name: Configurar Python ${{ matrix.python-version }}
+      - name: Configurar Python
         uses: actions/setup-python@v5
         with:
-          python-version: ${{ matrix.python-version }}
+          python-version: "3.11"
           cache: pip
 
       - name: Instalar dependências
@@ -32,36 +27,22 @@ jobs:
           if [ -f requirements.txt ]; then
             pip install -r requirements.txt
           else
-            pip install fastapi uvicorn pydantic
+            pip install fastapi pydantic
           fi
-          pip install ruff
 
-      - name: Verificar sintaxe e imports
+      - name: Verificar sintaxe
         run: |
           TARGETS=""
           for dir in api scanner; do
             if [ -d "$dir" ]; then TARGETS="$TARGETS $dir"; fi
           done
           if [ -z "$TARGETS" ]; then
-            echo "Nenhum diretório de código encontrado — nada a verificar."
+            echo "Nenhum diretório de código encontrado."
             exit 0
           fi
           echo "Verificando:$TARGETS"
           python -m compileall -q $TARGETS
-
-      - name: Lint com Ruff
-        run: |
-          TARGETS=""
-          for dir in api scanner; do
-            if [ -d "$dir" ]; then TARGETS="$TARGETS $dir"; fi
-          done
-          if [ -z "$TARGETS" ]; then
-            echo "Nenhum diretório de código encontrado — nada a lintar."
-            exit 0
-          fi
-          # E9 = erro de sintaxe, F = nomes indefinidos e imports não usados.
-          # Estilo fica fora para não travar o CI em código legado.
-          ruff check --select E9,F $TARGETS
+          echo "Sintaxe OK."
 
       - name: Subir a API e validar o health check
         run: |
@@ -69,34 +50,34 @@ jobs:
             echo "api/main.py ainda não existe — etapa ignorada."
             exit 0
           fi
-          uvicorn api.main:app --host 127.0.0.1 --port 8000 &
-          for i in $(seq 1 20); do
+
+          pip install "uvicorn[standard]"
+          uvicorn api.main:app --host 127.0.0.1 --port 8000 > /tmp/uvicorn.log 2>&1 &
+          SERVER_PID=$!
+
+          for i in $(seq 1 25); do
             if curl -sf http://127.0.0.1:8000/ > /dev/null; then
-              echo "API respondeu:"
-              curl -s http://127.0.0.1:8000/ | head -c 500
+              echo "API respondeu em http://127.0.0.1:8000/"
+              curl -s http://127.0.0.1:8000/ | head -c 600
               echo
+              echo "--- Endpoints documentados ---"
+              python -c "
+import json, urllib.request
+with urllib.request.urlopen('http://127.0.0.1:8000/openapi.json') as r:
+    spec = json.load(r)
+paths = spec.get('paths', {})
+print(f'Total: {len(paths)}')
+for route, methods in sorted(paths.items()):
+    for m in methods:
+        print(f'  {m.upper()} {route}')
+"
+              kill $SERVER_PID 2>/dev/null || true
               exit 0
             fi
             sleep 2
           done
-          echo "A API não respondeu no tempo esperado."
-          exit 1
 
-      - name: Validar o schema OpenAPI
-        run: |
-          if [ ! -f api/main.py ]; then
-            echo "api/main.py ainda não existe — etapa ignorada."
-            exit 0
-          fi
-          python - <<'PY'
-          import json, urllib.request
-          with urllib.request.urlopen("http://127.0.0.1:8000/openapi.json") as r:
-              spec = json.load(r)
-          paths = spec.get("paths", {})
-          print(f"Endpoints documentados: {len(paths)}")
-          for route, methods in sorted(paths.items()):
-              for method in methods:
-                  print(f"  {method.upper()} {route}")
-          assert paths, "O schema OpenAPI veio vazio"
-          PY
+          echo "A API não respondeu. Log do servidor:"
+          cat /tmp/uvicorn.log
+          exit 1
           

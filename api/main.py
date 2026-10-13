@@ -361,5 +361,5 @@ async def generate_report(target: str = Query(..., example="192.168.1.0/24")):
             "Configurar firewall com regras de whitelist",
             "Implementar sistema de detecção de intrusão (IDS/IPS)",
         ]
-    }
+            }
     

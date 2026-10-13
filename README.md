@@ -176,8 +176,9 @@ Base local `http://localhost:8000` · base em produção `https://sentinel-api.o
 | `GET` | `/` | Status do serviço e versão |
 | `POST` | `/api/scan/ports` | Varredura de portas TCP no alvo informado |
 | `GET` | `/api/scan/ssl` | Auditoria do certificado TLS de um hostname |
-| `GET` | `/api/threat/intel` | Consulta de IoC (dados de demonstração) |
-| `GET` | `/api/threat/stats` | Estatísticas agregadas (dados de demonstração) |
+| `GET` | `/api/threats/ioc` | Consulta de IoC na base interna de threat intelligence |
+| `GET` | `/api/vulnerabilities` | Lista as vulnerabilidades conhecidas, filtrável por severidade |
+| `GET` | `/api/dashboard/stats` | Estatísticas do dashboard — agregações geradas a cada chamada |
 | `GET` | `/api/report/generate` | Relatório executivo de segurança para o alvo |
 
 ### `POST /api/scan/ports`
@@ -278,7 +279,9 @@ Cada porta aberta é confrontada com uma tabela de serviços que carrega severid
 | Relatório JSON e score de risco | **Funcional** | Derivados dos achados da execução |
 | Agregados e feed do dashboard | **Demonstração** | Valores estáticos na interface, sem coleta em segundo plano |
 | Top Threat IPs do dashboard | **Demonstração** | Lista fixa; os endereços são exemplos e blocos reservados para documentação |
-| `/api/threat/intel` e `/api/threat/stats` | **Demonstração** | Não consultam base externa de threat intelligence |
+| `/api/threats/ioc` | **Demonstração** | Consulta uma lista fixa de cinco IPs em memória; não há base externa de threat intelligence |
+| `/api/vulnerabilities` | **Funcional** | Lê a base interna de portas do próprio código; sem dado externo |
+| `/api/dashboard/stats` | **Misto** | A rota é real e responde, mas os agregados são gerados por `random` a cada chamada |
 
 A fronteira é deliberada e está registrada aqui para que ninguém dimensione o projeto por engano — nem para cima, nem para baixo. O núcleo faz trabalho de rede real; a camada visual é demonstração e se identifica como tal na própria interface.
 
@@ -290,16 +293,23 @@ Itens levantados na revisão do próprio código, em ordem de prioridade. **Enqu
 
 | # | Item | Situação | Ação | Estado |
 | --- | --- | --- | --- | --- |
-| 1 | **CORS** | `allow_origins=["*"]` com todos os métodos e headers | Restringir à origem do dashboard via variável de ambiente | Módulo pronto, não registrado |
-| 2 | **Autenticação** | Ausente | Chave de API obrigatória nos endpoints de varredura | Módulo pronto, não registrado |
-| 3 | **Rate limiting** | Ausente | Limite por IP, com janela deslizante | Módulo pronto, não registrado |
+| 1 | **CORS** | `allow_origins=["*"]` com todos os métodos e headers | Restringir à origem do dashboard via variável de ambiente | Aplicado em `main.py` |
+| 2 | **Autenticação** | Ausente | Chave de API obrigatória nos endpoints de varredura | Aplicado em `main.py` |
+| 3 | **Rate limiting** | Ausente | Limite por IP, com janela deslizante | Aplicado em `main.py` |
 | 4 | **Autorização de alvo** | Apenas validação de formato | Bloquear faixas que não pertencem ao operador | Pendente |
 | 5 | **Divergência das bases** | Porta 21 classificada de forma diferente na API e no CLI | Unificar em `sentinel_core/` | Pendente |
 | 6 | **Tratamento de exceções** | `except Exception: pass` engole falha de socket | Logar em nível debug e contabilizar por porta | Pendente |
 
-Os itens 1, 2 e 3 estão implementados em `api/security.py`, que ainda **não foi adicionado ao repositório** e não é importado por `api/main.py`. Enquanto o registro não acontecer, o comportamento em produção permanece o descrito na coluna "Situação".
+Os itens 1, 2 e 3 estão implementados em `api/security.py` e registrados em `api/main.py` — `install_cors` substitui o middleware anterior e as rotas `POST /api/scan/ports` e `GET /api/scan/ssl` encadeiam `Depends(rate_limit)` e `Depends(verify_api_key)`.
 
-O risco combinado de 1, 2 e 3 é concreto: qualquer origem na internet pode disparar varreduras a partir da infraestrutura do projeto, sem autenticação e sem limite. Isso desloca a responsabilidade legal do atacante para o operador da API.
+Duas variáveis de ambiente do Render condicionam o efeito:
+
+| Variável | Sem ela |
+| --- | --- |
+| `SENTINEL_ALLOWED_ORIGINS` | CORS cai no padrão de desenvolvimento (localhost) e o dashboard deixa de conseguir chamar a API |
+| `SENTINEL_API_KEY` | A autenticação fica desligada e a API permanece aberta para qualquer origem |
+
+O risco combinado de 1, 2 e 3 é concreto: sem a chave definida, qualquer origem na internet pode disparar varreduras a partir da infraestrutura do projeto. Isso desloca a responsabilidade legal do atacante para o operador da API.
 
 Configuração pretendida, já suportada por `security.py`:
 
